@@ -1,0 +1,930 @@
+[
+    {
+        "id": "4163dde65631095e",
+        "type": "tab",
+        "label": "complete_inferenceonnx",
+        "disabled": false,
+        "info": "Realtime dashboard + Supabase persistence + alert routing"
+    },
+    {
+        "id": "378bab3985783422",
+        "type": "mqtt in",
+        "z": "4163dde65631095e",
+        "name": "EL MQTT input",
+        "func": "const panelOptions = [];\nfor (let i = 1; i <= 9; i++) {\n  panelOptions.push({ [`Panel ${i}`]: `panel_${i}` });\n}\nconst selectedPanel = flow.get('selected_panel_id') || 'panel_1';\nflow.set('selected_panel_id', selectedPanel);\nconst modeOptions = [\n  { 'Live MQTT': 'live' },\n  { 'DB Filter': 'db' }\n];\nconst selectedMode = flow.get('selected_mode') || 'live';\nflow.set('selected_mode', selectedMode);\nconst toPanelDropdown = {\n  options: panelOptions,\n  ui_update: { options: panelOptions },\n  payload: selectedPanel,\n  topic: 'panel_id'\n};\nconst toPadBuilder = { payload: selectedPanel, topic: 'panel_id' };\nconst toModeDropdown = {\n  options: modeOptions,\n  ui_update: { options: modeOptions },\n  payload: selectedMode,\n  topic: 'mode'\n};\nreturn [toPanelDropdown, toPadBuilder, toModeDropdown];",
+        "topic": "pv/inspection/severity",
+        "qos": "1",
+        "datatype": "auto-detect",
+        "broker": "broker_mosquitto",
+        "nl": false,
+        "rap": true,
+        "rh": 0,
+        "inputs": 0,
+        "x": 100,
+        "y": 240,
+        "wires": [
+            [
+                "fef330b176ed3c87"
+            ]
+        ]
+    },
+    {
+        "id": "fef330b176ed3c87",
+        "type": "json",
+        "z": "4163dde65631095e",
+        "name": "Parse payload",
+        "func": "function normalizeSelection(payload, expectedPrefix, fallback) {\n  if (typeof payload === 'string') {\n    if (payload.startsWith(expectedPrefix)) return payload;\n    const m = payload.match(/(\\d+)/);\n    if (m) return `${expectedPrefix}${m[1].padStart(2, '0')}`;\n  }\n  if (payload && typeof payload === 'object') {\n    if (typeof payload.value === 'string') return payload.value;\n    const values = Object.values(payload);\n    if (values.length && typeof values[0] === 'string') return values[0];\n  }\n  return fallback;\n}\nconst selectedPanel = normalizeSelection(msg.payload, 'panel_', flow.get('selected_panel_id') || 'panel_1');\nflow.set('selected_panel_id', selectedPanel);\nconst options = [];\nfor (let i = 1; i <= 24; i++) {\n  const value = `pad_${String(i).padStart(2, '0')}`;\n  options.push({ [`Pad ${String(i).padStart(2, '0')}`]: value });\n}\nlet selectedPad = flow.get('selected_pad_id') || 'pad_01';\nif (!options.some(o => Object.values(o)[0] === selectedPad)) selectedPad = 'pad_01';\nflow.set('selected_pad_id', selectedPad);\nconst toPadDropdown = {\n  options,\n  ui_update: { options },\n  payload: selectedPad,\n  topic: 'pad_id'\n};\nconst toQuery = { payload: selectedPad, topic: 'pad_id' };\nreturn [toPadDropdown, toQuery];",
+        "property": "payload",
+        "action": "obj",
+        "pretty": false,
+        "x": 260,
+        "y": 320,
+        "wires": [
+            [
+                "49cabaeeef71a3b2"
+            ]
+        ]
+    },
+    {
+        "id": "d01c13c8e488dd89",
+        "type": "ui_template",
+        "z": "4163dde65631095e",
+        "group": "bd6fb08e445bc717",
+        "func": "function normalizeSelection(payload, expectedPrefix, fallback) {\n  if (typeof payload === 'string') {\n    if (payload.startsWith(expectedPrefix)) return payload;\n    const m = payload.match(/(\\d+)/);\n    if (m) return `${expectedPrefix}${expectedPrefix === 'pad_' ? m[1].padStart(2, '0') : m[1]}`;\n  }\n  if (payload && typeof payload === 'object') {\n    if (typeof payload.value === 'string') return payload.value;\n    const values = Object.values(payload);\n    if (values.length && typeof values[0] === 'string') return values[0];\n  }\n  return fallback;\n}\nif (msg.topic === 'panel_id') {\n  flow.set('selected_panel_id', normalizeSelection(msg.payload, 'panel_', flow.get('selected_panel_id') || 'panel_1'));\n}\nif (msg.topic === 'pad_id') {\n  flow.set('selected_pad_id', normalizeSelection(msg.payload, 'pad_', flow.get('selected_pad_id') || 'pad_01'));\n}\nif (msg.topic === 'mode') {\n  const modeValue = normalizeSelection(msg.payload, '', flow.get('selected_mode') || 'live');\n  const normalizedMode = modeValue === 'db' ? 'db' : 'live';\n  flow.set('selected_mode', normalizedMode);\n  if (normalizedMode !== 'db') return null;\n}\nconst selectedMode = flow.get('selected_mode') || 'live';\nif (selectedMode !== 'db') return null;\nconst panelId = flow.get('selected_panel_id') || 'panel_1';\nconst padId = flow.get('selected_pad_id') || 'pad_01';\nconst supabaseUrl = env.get('SUPABASE_URL');\nconst serviceRoleKey = env.get('SUPABASE_SERVICE_ROLE_KEY');\nif (!supabaseUrl || !serviceRoleKey) {\n  node.warn('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not configured');\n  return null;\n}\nmsg.meta = { panel_id: panelId, pad_id: padId };\nmsg.url = `${supabaseUrl}/rest/v1/inspections?select=*&panel_id=eq.${encodeURIComponent(panelId)}&pad_id=eq.${encodeURIComponent(padId)}&order=captured_at.desc&limit=1`;\nmsg.method = 'GET';\nmsg.headers = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };\nreturn msg;",
+        "name": "Dashboard banner + theme",
+        "order": 1,
+        "width": "24",
+        "height": "4",
+        "format": "<style>\n.nr-dashboard-theme { background: linear-gradient(180deg, #eef3f8 0%, #dde7f1 100%); }\n.nr-dashboard-theme md-content { background: transparent; max-width: none !important; }\n.nr-dashboard-theme md-card { border-radius: 18px; box-shadow: 0 12px 34px rgba(15, 23, 42, 0.10); border: 1px solid rgba(148, 163, 184, 0.18); overflow: hidden; }\n.nr-dashboard-theme .nr-dashboard-cardtitle { font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #334155; }\n.nr-dashboard-theme .nr-dashboard-cardcontainer { padding-top: 8px; padding-bottom: 8px; }\n.cder-hero { padding: 22px 24px; border-radius: 22px; background: linear-gradient(135deg, #0f1f33 0%, #19304f 50%, #325d96 100%); color: #fff; min-height: 140px; display: flex; flex-direction: column; justify-content: center; }\n.cder-hero__eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.78; }\n.cder-hero h1 { margin: 8px 0 0; font-size: 28px; line-height: 1.05; }\n.cder-hero p { margin: 10px 0 0; max-width: 860px; font-size: 14px; line-height: 1.55; opacity: 0.9; }\n.cder-hero__chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }\n.cder-hero__chips span { display: inline-flex; align-items: center; padding: 7px 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.16); font-size: 12px; font-weight: 600; letter-spacing: 0.02em; }\n.cder-summary-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }\n.cder-kpi-card { border-radius: 18px; padding: 16px 16px 14px; min-height: 100px; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.8); }\n.cder-kpi-card--accent { background: linear-gradient(135deg, #10253f 0%, #1b3353 100%); color: #fff; }\n.cder-kpi-card--soft { background: linear-gradient(135deg, #eff6ff 0%, #e8f1fb 100%); }\n.cder-kpi-card--success { background: linear-gradient(135deg, #effaf2 0%, #e3f4ea 100%); }\n.cder-kpi-card--warning { background: linear-gradient(135deg, #fff8e7 0%, #fdf0ce 100%); }\n.cder-kpi-label { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.72; }\n.cder-kpi-value { margin-top: 8px; font-size: 22px; font-weight: 800; line-height: 1.1; word-break: break-word; }\n.cder-kpi-hint { margin-top: 6px; font-size: 12px; line-height: 1.35; opacity: 0.78; }\n.cder-alert-card { border-radius: 18px; padding: 18px 18px 16px; min-height: 92px; background: linear-gradient(135deg, #fff5f5 0%, #ffe7e7 100%); border: 1px solid rgba(220, 38, 38, 0.18); }\n.cder-alert-card.is-open { background: linear-gradient(135deg, #4c1118 0%, #8d1f2a 100%); color: #fff; }\n.cder-alert-card__label { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.8; }\n.cder-alert-card__value { margin-top: 8px; font-size: 18px; font-weight: 700; line-height: 1.35; }\n.cder-open-count { border-radius: 18px; padding: 18px; min-height: 92px; background: linear-gradient(135deg, #eff6ff 0%, #dfeeff 100%); border: 1px solid rgba(37, 99, 235, 0.16); }\n.cder-open-count__label { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.72; }\n.cder-open-count__value { margin-top: 8px; font-size: 30px; font-weight: 800; line-height: 1; }\n.cder-open-count__hint { margin-top: 6px; font-size: 12px; line-height: 1.35; opacity: 0.76; }\n</style>\n<div class='cder-hero'>\n  <div class='cder-hero__eyebrow'>Realtime inspection dashboard</div>\n  <h1>CDER Pi Camera Service</h1>\n  <p>MQTT intake, Supabase persistence, and alert routing in one full-width workspace. The top cards summarize the current inspection, while the chart and alert panels keep the operational state visible at a glance.</p>\n  <div class='cder-hero__chips'>\n    <span>MQTT ingest</span>\n    <span>Severity trend</span>\n    <span>Supabase write</span>\n    <span>Open alerts</span>\n  </div>\n</div>",
+        "storeOutMessages": false,
+        "fwdInMessages": false,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1360,
+        "y": 160,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "9d60b6df782cfab2",
+        "type": "change",
+        "z": "4163dde65631095e",
+        "name": "Extract severity_score",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.severity_score",
+                "tot": "msg"
+            }
+        ],
+        "x": 1500,
+        "y": 500,
+        "wires": [
+            [
+                "fa073ccb6dd0440e",
+                "5df8944a170efec7"
+            ]
+        ]
+    },
+    {
+        "id": "fa073ccb6dd0440e",
+        "type": "ui_gauge",
+        "z": "4163dde65631095e",
+        "name": "Severity Gauge",
+        "group": "bd6fb08e445bc717",
+        "order": 6,
+        "width": 5,
+        "height": 6,
+        "gtype": "gage",
+        "title": "Defect Severity",
+        "label": "score",
+        "format": "{{value}}",
+        "min": 0,
+        "max": "1",
+        "colors": [
+            "#00b500",
+            "#e6e600",
+            "#ca3838"
+        ],
+        "seg1": "0.35",
+        "seg2": "0.65",
+        "diff": false,
+        "className": "",
+        "x": 1780,
+        "y": 520,
+        "wires": []
+    },
+    {
+        "id": "5df8944a170efec7",
+        "type": "ui_chart",
+        "z": "4163dde65631095e",
+        "name": "Severity Trend",
+        "group": "bd6fb08e445bc717",
+        "order": 7,
+        "width": 13,
+        "height": 6,
+        "label": "Severity Over Time",
+        "chartType": "line",
+        "legend": "false",
+        "xformat": "MM-dd HH:mm",
+        "interpolate": "linear",
+        "nodata": "No data yet",
+        "dot": false,
+        "ymin": "0",
+        "ymax": "1",
+        "removeOlder": 1,
+        "removeOlderPoints": "",
+        "removeOlderUnit": "604800",
+        "cutout": 0,
+        "useOneColor": true,
+        "useUTC": false,
+        "colors": [
+            "#1f77b4",
+            "#000000",
+            "#000000",
+            "#000000",
+            "#000000",
+            "#000000",
+            "#000000",
+            "#000000",
+            "#000000"
+        ],
+        "outputs": 1,
+        "useDifferentColor": false,
+        "className": "",
+        "x": 1780,
+        "y": 460,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "9033fcbccc48f59a",
+        "type": "ui_template",
+        "z": "4163dde65631095e",
+        "group": "bd6fb08e445bc717",
+        "name": "Inspection summary cards",
+        "order": 5,
+        "width": "24",
+        "height": "4",
+        "format": "<div class='cder-summary-grid'>\n  <div class='cder-kpi-card cder-kpi-card--accent'>\n    <div class='cder-kpi-label'>Panel</div>\n    <div class='cder-kpi-value'>{{msg.payload.panel_id || '—'}}</div>\n    <div class='cder-kpi-hint'>Current inspection panel</div>\n  </div>\n  <div class='cder-kpi-card cder-kpi-card--soft'>\n    <div class='cder-kpi-label'>Pad</div>\n    <div class='cder-kpi-value'>{{msg.payload.pad_id || '—'}}</div>\n    <div class='cder-kpi-hint'>Target pad identifier</div>\n  </div>\n  <div class='cder-kpi-card cder-kpi-card--success'>\n    <div class='cder-kpi-label'>Model Status</div>\n    <div class='cder-kpi-value'>{{msg.payload.status || '—'}}</div>\n    <div class='cder-kpi-hint'>Classification result</div>\n  </div>\n  <div class='cder-kpi-card cder-kpi-card--soft'>\n    <div class='cder-kpi-label'>Robot</div>\n    <div class='cder-kpi-value'>{{msg.payload.robot_id || '—'}}</div>\n    <div class='cder-kpi-hint'>Source robot identity</div>\n  </div>\n  <div class='cder-kpi-card cder-kpi-card--warning'>\n    <div class='cder-kpi-label'>Model Version</div>\n    <div class='cder-kpi-value'>{{msg.payload.model_version || '—'}}</div>\n    <div class='cder-kpi-hint'>Current deployed model</div>\n  </div>\n  <div class='cder-kpi-card cder-kpi-card--accent'>\n    <div class='cder-kpi-label'>Severity</div>\n    <div class='cder-kpi-value'>{{msg.payload.severity_score | number: 2}}</div>\n    <div class='cder-kpi-hint'>Higher means more severe</div>\n  </div>\n</div>",
+        "storeOutMessages": false,
+        "fwdInMessages": false,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1490,
+        "y": 220,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "2d57054aa53c1f00",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Validate + prepare Supabase insert",
+        "func": "const p = msg.payload || {};\n\nconst score = Number(p.severity_score);\nif (!Number.isFinite(score)) {\n    node.warn('Dropped message: severity_score is missing/invalid');\n    return null;\n}\nif (!p.pad_id) {\n    node.warn('Dropped message: pad_id is required');\n    return null;\n}\n\nconst inspection = {\n    captured_at: new Date().toISOString(),\n    robot_id: p.robot_id || 'robot_01',\n    panel_id: p.panel_id || 'panel_A',\n    pad_id: p.pad_id,\n    severity_score: score,\n    status: p.status || (score >= 0.70 ? 'CRITICAL' : 'OK'),\n    image_path: p.image_path || null,\n    model_version: p.model_version || 'onnx_v1',\n    raw_payload: p\n};\n\nconst supabaseUrl = env.get('SUPABASE_URL');\nconst serviceRoleKey = env.get('SUPABASE_SERVICE_ROLE_KEY');\nif (!supabaseUrl || !serviceRoleKey) {\n    node.error('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not configured', msg);\n    return null;\n}\n\nmsg.meta = { panel_id: inspection.panel_id, pad_id: inspection.pad_id };\nmsg.url = supabaseUrl + '/rest/v1/inspections';\nmsg.method = 'POST';\nmsg.headers = {\n    apikey: serviceRoleKey,\n    Authorization: 'Bearer ' + serviceRoleKey,\n    'Content-Type': 'application/json',\n    Prefer: 'return=representation'\n};\nmsg.payload = [inspection];\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 840,
+        "y": 420,
+        "wires": [
+            [
+                "abad6f7232f5fa52"
+            ]
+        ]
+    },
+    {
+        "id": "abad6f7232f5fa52",
+        "type": "http request",
+        "z": "4163dde65631095e",
+        "name": "Supabase insert inspection",
+        "method": "use",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": true,
+        "headers": [],
+        "x": 1220,
+        "y": 380,
+        "wires": [
+            [
+                "9b229abd7d61aad7"
+            ]
+        ]
+    },
+    {
+        "id": "9b229abd7d61aad7",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Prepare evaluate_pad_alert RPC",
+        "func": "const supabaseUrl = env.get('SUPABASE_URL');\nconst serviceRoleKey = env.get('SUPABASE_SERVICE_ROLE_KEY');\n\nmsg.url = supabaseUrl + '/rest/v1/rpc/evaluate_pad_alert';\nmsg.method = 'POST';\nmsg.headers = {\n    apikey: serviceRoleKey,\n    Authorization: 'Bearer ' + serviceRoleKey,\n    'Content-Type': 'application/json'\n};\nmsg.payload = {\n    p_panel_id: msg.meta.panel_id,\n    p_pad_id: msg.meta.pad_id\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1520,
+        "y": 380,
+        "wires": [
+            [
+                "85c8d02d754ecb11"
+            ]
+        ]
+    },
+    {
+        "id": "85c8d02d754ecb11",
+        "type": "http request",
+        "z": "4163dde65631095e",
+        "name": "Supabase evaluate alert",
+        "method": "use",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": true,
+        "headers": [],
+        "x": 1790,
+        "y": 380,
+        "wires": [
+            [
+                "7b2abba715eea19a"
+            ]
+        ]
+    },
+    {
+        "id": "7b2abba715eea19a",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Parse alert result",
+        "func": "const r = Array.isArray(msg.payload) ? msg.payload[0] : msg.payload;\nif (!r || !r.state) {\n    node.warn('evaluate_pad_alert returned empty result');\n    return null;\n}\nmsg.alert = r;\nmsg.payload = r.state + ' - ' + r.reason + ' (score=' + r.current_score + ')';\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 2030,
+        "y": 380,
+        "wires": [
+            [
+                "ae9f0441902c27a6",
+                "80d41922e7182c5d",
+                "0d6c33d1873972b1"
+            ]
+        ]
+    },
+    {
+        "id": "ae9f0441902c27a6",
+        "type": "ui_template",
+        "z": "4163dde65631095e",
+        "group": "bd6fb08e445bc717",
+        "name": "DB Alert",
+        "order": 8,
+        "width": 6,
+        "height": "3",
+        "format": "<div class='cder-alert-card' ng-class=\"{'is-open': msg.alert && msg.alert.state === 'OPEN'}\">\n  <div class='cder-alert-card__label'>DB Alert</div>\n  <div class='cder-alert-card__value'>{{msg.payload}}</div>\n</div>",
+        "storeOutMessages": false,
+        "fwdInMessages": false,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 2260,
+        "y": 340,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "80d41922e7182c5d",
+        "type": "switch",
+        "z": "4163dde65631095e",
+        "name": "OPEN?",
+        "property": "alert.state",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "eq",
+                "v": "OPEN",
+                "vt": "str"
+            },
+            {
+                "t": "else"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 2,
+        "x": 2230,
+        "y": 400,
+        "wires": [
+            [
+                "4947b9151d08d08b"
+            ],
+            [
+                "25f56bc7be29979b"
+            ]
+        ]
+    },
+    {
+        "id": "4947b9151d08d08b",
+        "type": "debug",
+        "z": "4163dde65631095e",
+        "name": "OPEN alert",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "alert",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 2420,
+        "y": 380,
+        "wires": []
+    },
+    {
+        "id": "25f56bc7be29979b",
+        "type": "debug",
+        "z": "4163dde65631095e",
+        "name": "Non-OPEN alert",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "alert",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 2430,
+        "y": 420,
+        "wires": []
+    },
+    {
+        "id": "0d6c33d1873972b1",
+        "type": "debug",
+        "z": "4163dde65631095e",
+        "name": "Alert eval raw",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 2240,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "9de0abdf38ee60b5",
+        "type": "inject",
+        "z": "4163dde65631095e",
+        "name": "Poll open alerts (30s)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "30",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "3",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 180,
+        "y": 640,
+        "wires": [
+            [
+                "6c3530e6bf763dd9"
+            ]
+        ]
+    },
+    {
+        "id": "6c3530e6bf763dd9",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Prepare open alert count query",
+        "func": "const supabaseUrl = env.get('SUPABASE_URL');\nconst serviceRoleKey = env.get('SUPABASE_SERVICE_ROLE_KEY');\nif (!supabaseUrl || !serviceRoleKey) {\n    return null;\n}\nmsg.url = supabaseUrl + '/rest/v1/vw_open_alerts?select=id';\nmsg.method = 'GET';\nmsg.headers = {\n    apikey: serviceRoleKey,\n    Authorization: 'Bearer ' + serviceRoleKey\n};\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 430,
+        "y": 640,
+        "wires": [
+            [
+                "1c45e7a3d11c46cd"
+            ]
+        ]
+    },
+    {
+        "id": "1c45e7a3d11c46cd",
+        "type": "http request",
+        "z": "4163dde65631095e",
+        "name": "Supabase get open alerts",
+        "method": "use",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": true,
+        "headers": [],
+        "x": 690,
+        "y": 640,
+        "wires": [
+            [
+                "d48de1eba48e73d5"
+            ]
+        ]
+    },
+    {
+        "id": "d48de1eba48e73d5",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Format open alert count",
+        "func": "let count = 0;\nif (Array.isArray(msg.payload)) {\n    count = msg.payload.length;\n} else if (msg.payload && Array.isArray(msg.payload.value)) {\n    count = msg.payload.value.length;\n}\nmsg.payload = String(count);\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 930,
+        "y": 640,
+        "wires": [
+            [
+                "5d9d159b71f6a22c"
+            ]
+        ]
+    },
+    {
+        "id": "5d9d159b71f6a22c",
+        "type": "ui_template",
+        "z": "4163dde65631095e",
+        "group": "bd6fb08e445bc717",
+        "name": "",
+        "order": 9,
+        "width": 6,
+        "height": "3",
+        "format": "<div class='cder-open-count'>\n  <div class='cder-open-count__label'>Open Alerts (DB)</div>\n  <div class='cder-open-count__value'>{{msg.payload || '0'}}</div>\n  <div class='cder-open-count__hint'>Polled every 30 seconds</div>\n</div>",
+        "storeOutMessages": false,
+        "fwdInMessages": false,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1120,
+        "y": 640,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "bd980b6fa41ecb83",
+        "type": "catch",
+        "z": "4163dde65631095e",
+        "name": "Catch flow errors",
+        "scope": [
+            "2d57054aa53c1f00",
+            "abad6f7232f5fa52",
+            "9b229abd7d61aad7",
+            "85c8d02d754ecb11",
+            "7b2abba715eea19a",
+            "1c45e7a3d11c46cd"
+        ],
+        "uncaught": false,
+        "x": 170,
+        "y": 700,
+        "wires": [
+            [
+                "67890dee1759dad9"
+            ]
+        ]
+    },
+    {
+        "id": "67890dee1759dad9",
+        "type": "debug",
+        "z": "4163dde65631095e",
+        "name": "Flow errors",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": true,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "error.message",
+        "statusType": "msg",
+        "x": 390,
+        "y": 700,
+        "wires": []
+    },
+    {
+        "id": "bdf825f0fed97f53",
+        "type": "inject",
+        "z": "4163dde65631095e",
+        "name": "Init panel/pad selectors",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "1",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 40,
+        "wires": [
+            [
+                "87549e05883b4896"
+            ]
+        ]
+    },
+    {
+        "id": "87549e05883b4896",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Build panel options (9)",
+        "func": "const panelOptions = [];\nfor (let i = 1; i <= 9; i++) {\n  panelOptions.push({ [`Panel ${i}`]: `panel_${i}` });\n}\nconst selectedPanel = flow.get('selected_panel_id') || 'panel_1';\nflow.set('selected_panel_id', selectedPanel);\nconst modeOptions = [\n  { 'Live MQTT': 'live' },\n  { 'DB Filter': 'db' }\n];\nconst selectedMode = flow.get('selected_mode') || 'live';\nflow.set('selected_mode', selectedMode);\nconst toPanelDropdown = { options: panelOptions, payload: selectedPanel, topic: 'panel_id' };\nconst toPadBuilder = { payload: selectedPanel, topic: 'panel_id' };\nconst toModeDropdown = { options: modeOptions, payload: selectedMode, topic: 'mode' };\nreturn [toPanelDropdown, toPadBuilder, toModeDropdown];",
+        "outputs": 3,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 420,
+        "y": 40,
+        "wires": [
+            [
+                "c406061ff1874a0d"
+            ],
+            [
+                "463c6eb804981111"
+            ],
+            [
+                "39453b4603d5a4bc"
+            ]
+        ]
+    },
+    {
+        "id": "c406061ff1874a0d",
+        "type": "ui_dropdown",
+        "z": "4163dde65631095e",
+        "name": "Panel Selector",
+        "label": "Panel",
+        "tooltip": "Filter by panel",
+        "place": "Select panel",
+        "group": "bd6fb08e445bc717",
+        "order": 2,
+        "width": 8,
+        "height": 1,
+        "passthru": true,
+        "multiple": false,
+        "options": [],
+        "payload": "",
+        "topic": "panel_id",
+        "topicType": "str",
+        "className": "",
+        "x": 700,
+        "y": 40,
+        "wires": [
+            [
+                "463c6eb804981111"
+            ]
+        ]
+    },
+    {
+        "id": "463c6eb804981111",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Build pad options (24)",
+        "func": "const selectedPanel = msg.payload || flow.get('selected_panel_id') || 'panel_1';\nflow.set('selected_panel_id', selectedPanel);\nconst options = [];\nfor (let i = 1; i <= 24; i++) {\n  const value = `pad_${String(i).padStart(2, '0')}`;\n  options.push({ [`Pad ${String(i).padStart(2, '0')}`]: value });\n}\nlet selectedPad = flow.get('selected_pad_id') || 'pad_01';\nif (!options.some(o => Object.values(o)[0] === selectedPad)) selectedPad = 'pad_01';\nflow.set('selected_pad_id', selectedPad);\nconst toPadDropdown = { options, payload: selectedPad, topic: 'pad_id' };\nconst toQuery = { payload: selectedPad, topic: 'pad_id' };\nreturn [toPadDropdown, toQuery];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 940,
+        "y": 40,
+        "wires": [
+            [
+                "219e1bbd965d531c"
+            ],
+            [
+                "c91a8c930269aaa3"
+            ]
+        ]
+    },
+    {
+        "id": "219e1bbd965d531c",
+        "type": "ui_dropdown",
+        "z": "4163dde65631095e",
+        "name": "Pad Selector",
+        "label": "Pad",
+        "tooltip": "Filter by pad within panel",
+        "place": "Select pad",
+        "group": "bd6fb08e445bc717",
+        "order": 3,
+        "width": 8,
+        "height": 1,
+        "passthru": true,
+        "multiple": false,
+        "options": [],
+        "payload": "",
+        "topic": "pad_id",
+        "topicType": "str",
+        "className": "",
+        "x": 1210,
+        "y": 40,
+        "wires": [
+            [
+                "c91a8c930269aaa3"
+            ]
+        ]
+    },
+    {
+        "id": "1c65097cac5eb74a",
+        "type": "inject",
+        "z": "4163dde65631095e",
+        "name": "Poll selected pad (15s)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "15",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "2",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 170,
+        "y": 560,
+        "wires": [
+            [
+                "c91a8c930269aaa3"
+            ]
+        ]
+    },
+    {
+        "id": "c91a8c930269aaa3",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Prepare selected pad query",
+        "func": "if (msg.topic === 'panel_id') flow.set('selected_panel_id', msg.payload);\nif (msg.topic === 'pad_id') flow.set('selected_pad_id', msg.payload);\nif (msg.topic === 'mode') {\n  flow.set('selected_mode', msg.payload);\n  if (msg.payload !== 'db') return null;\n}\nconst selectedMode = flow.get('selected_mode') || 'live';\nif (selectedMode !== 'db') return null;\nconst panelId = flow.get('selected_panel_id') || 'panel_1';\nconst padId = flow.get('selected_pad_id') || 'pad_01';\nconst supabaseUrl = env.get('SUPABASE_URL');\nconst serviceRoleKey = env.get('SUPABASE_SERVICE_ROLE_KEY');\nif (!supabaseUrl || !serviceRoleKey) {\n  node.warn('SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY not configured');\n  return null;\n}\nmsg.meta = { panel_id: panelId, pad_id: padId };\nmsg.url = `${supabaseUrl}/rest/v1/inspections?select=*&panel_id=eq.${encodeURIComponent(panelId)}&pad_id=eq.${encodeURIComponent(padId)}&order=captured_at.desc&limit=1`;\nmsg.method = 'GET';\nmsg.headers = { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` };\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 460,
+        "y": 560,
+        "wires": [
+            [
+                "01db16b998b7825f"
+            ]
+        ]
+    },
+    {
+        "id": "01db16b998b7825f",
+        "type": "http request",
+        "z": "4163dde65631095e",
+        "name": "Supabase selected inspection",
+        "method": "use",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": true,
+        "headers": [],
+        "x": 730,
+        "y": 560,
+        "wires": [
+            [
+                "141fcb464f623838"
+            ]
+        ]
+    },
+    {
+        "id": "141fcb464f623838",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Map selected inspection to UI",
+        "func": "const row = Array.isArray(msg.payload) ? msg.payload[0] : msg.payload;\nif (!row) {\n  node.warn('No inspection rows for selected panel/pad');\n  return null;\n}\nmsg.payload = row;\nmsg.meta = { panel_id: row.panel_id, pad_id: row.pad_id };\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1010,
+        "y": 560,
+        "wires": [
+            [
+                "c0c6e3d0de8391a0"
+            ]
+        ]
+    },
+    {
+        "id": "4d1bdcf78a80ab9a",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Prepare selected alert RPC",
+        "func": "const supabaseUrl = env.get('SUPABASE_URL');\nconst serviceRoleKey = env.get('SUPABASE_SERVICE_ROLE_KEY');\nif (!supabaseUrl || !serviceRoleKey) return null;\nconst panelId = (msg.meta && msg.meta.panel_id) || flow.get('selected_panel_id') || 'panel_1';\nconst padId = (msg.meta && msg.meta.pad_id) || flow.get('selected_pad_id') || 'pad_01';\nmsg.url = `${supabaseUrl}/rest/v1/rpc/evaluate_pad_alert`;\nmsg.method = 'POST';\nmsg.headers = {\n  apikey: serviceRoleKey,\n  Authorization: `Bearer ${serviceRoleKey}`,\n  'Content-Type': 'application/json'\n};\nmsg.payload = { p_panel_id: panelId, p_pad_id: padId };\nreturn msg;",
+        "outputs": 1,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1500,
+        "y": 580,
+        "wires": [
+            [
+                "2b30b89c3a224998"
+            ]
+        ]
+    },
+    {
+        "id": "2b30b89c3a224998",
+        "type": "http request",
+        "z": "4163dde65631095e",
+        "name": "Supabase selected alert",
+        "method": "use",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": true,
+        "headers": [],
+        "x": 1770,
+        "y": 580,
+        "wires": [
+            [
+                "7b2abba715eea19a"
+            ]
+        ]
+    },
+    {
+        "id": "49cabaeeef71a3b2",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Route MQTT by mode",
+        "func": "const mode = flow.get('selected_mode') || 'live';\nconst ingestMsg = RED.util.cloneMessage(msg);\nif (mode === 'live') {\n  return [msg, ingestMsg];\n}\nreturn [null, ingestMsg];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 480,
+        "y": 240,
+        "wires": [
+            [
+                "9d60b6df782cfab2",
+                "d01c13c8e488dd89",
+                "9033fcbccc48f59a"
+            ],
+            [
+                "2d57054aa53c1f00"
+            ]
+        ]
+    },
+    {
+        "id": "39453b4603d5a4bc",
+        "type": "ui_dropdown",
+        "z": "4163dde65631095e",
+        "name": "Mode Selector",
+        "label": "Mode",
+        "tooltip": "Switch between live MQTT and filtered DB display",
+        "place": "Select mode",
+        "group": "bd6fb08e445bc717",
+        "order": 4,
+        "width": 8,
+        "height": 1,
+        "passthru": true,
+        "multiple": false,
+        "options": [],
+        "payload": "",
+        "topic": "mode",
+        "topicType": "str",
+        "className": "",
+        "x": 760,
+        "y": 100,
+        "wires": [
+            [
+                "c91a8c930269aaa3",
+                "c0c6e3d0de8391a0",
+                "49cabaeeef71a3b2"
+            ]
+        ]
+    },
+    {
+        "id": "c0c6e3d0de8391a0",
+        "type": "function",
+        "z": "4163dde65631095e",
+        "name": "Route DB by mode",
+        "func": "if (msg.topic === 'mode') {\n  flow.set('selected_mode', msg.payload);\n  return null;\n}\nconst mode = flow.get('selected_mode') || 'live';\nif (mode !== 'db') return null;\nreturn [msg, RED.util.cloneMessage(msg)];",
+        "outputs": 2,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1250,
+        "y": 520,
+        "wires": [
+            [
+                "9033fcbccc48f59a",
+                "9d60b6df782cfab2"
+            ],
+            [
+                "4d1bdcf78a80ab9a"
+            ]
+        ]
+    },
+    {
+        "id": "broker_mosquitto",
+        "type": "mqtt-broker",
+        "name": "Mosquitto Public",
+        "broker": "test.mosquitto.org",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "bd6fb08e445bc717",
+        "type": "ui_group",
+        "z": "4163dde65631095e",
+        "name": "Group",
+        "tab": "99913c155b0d7be5",
+        "order": null,
+        "disp": true,
+        "width": "24",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "99913c155b0d7be5",
+        "type": "ui_tab",
+        "z": "4163dde65631095e",
+        "name": "complete_inferenceonnx",
+        "icon": "dashboard",
+        "order": 1,
+        "disabled": false,
+        "hidden": false
+    }
+]
