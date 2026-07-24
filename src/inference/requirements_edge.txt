@@ -1,0 +1,5 @@
+numpy>=1.21
+opencv-python-headless>=4.5
+onnxruntime>=1.14
+paho-mqtt>=2.0
+psutil>=5.9

@@ -9,37 +9,15 @@ This folder contains the SQL needed for a production-ready baseline for:
 
 ## Files
 
-0. `000_full_migration.sql`
-Single-file migration that creates schema, functions, triggers, and views in one run.
-
-1. `001_schema.sql`
-Creates all base tables and indexes.
-
-2. `002_alert_logic.sql`
-Creates SQL functions and trigger logic that auto-opens/resolves alerts when a new inspection row is inserted.
-
-3. `003_views.sql`
-Creates read-optimized views for dashboards and trend widgets.
+- `000_full_migration.sql` — Single-file migration that creates schema, functions, triggers, and views in one run.
 
 ## How To Apply In Supabase
 
-### Option A (recommended)
-
-Run this one file in Supabase SQL Editor:
+Run this single file in the Supabase SQL Editor:
 
 1. `000_full_migration.sql`
 
-### Option B (modular)
-
-Run the SQL files in this exact order inside the Supabase SQL Editor:
-
-1. `001_schema.sql`
-2. `002_alert_logic.sql`
-3. `003_views.sql`
-
-Node-RED import flow is provided at `../nodered/supabase_ingest_flow.json`.
-
-You can paste each file manually, or copy each script into a migration if you use Supabase CLI.
+The migration creates all tables, indexes, functions, triggers, and views in one atomic execution.
 
 ## Data Flow Expected
 

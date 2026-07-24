@@ -10,8 +10,7 @@ This folder contains an importable Node-RED flow that:
 
 ## Files
 
-- supabase_ingest_flow.json: Minimal ingest-only flow (MQTT -> Supabase -> alert routing)
-- full_cder_supabase_dashboard_flow.json: Full dashboard + Supabase ingest + DB alert count polling
+- `flow.json`: Complete inference + dashboard + Supabase persistence + alert routing flow
 
 ## Required Node-RED Environment Variables
 
@@ -23,8 +22,8 @@ Set these in your Node-RED runtime before deploying the flow:
 ## Import Steps
 
 1. Open Node-RED editor
-2. Menu -> Import
-3. Paste contents of supabase_ingest_flow.json or select file
+2. Menu → Import
+3. Select `flow.json` from this directory
 4. Update MQTT broker node host and auth
 5. Deploy
 
@@ -50,9 +49,9 @@ Expected result:
 
 ## Full Flow Setup (Recommended)
 
-Use this if you want one complete tab with realtime widgets and Supabase persistence:
+The imported `flow.json` provides one complete tab with realtime widgets and Supabase persistence:
 
-1. Import `full_cder_supabase_dashboard_flow.json`
+1. Import `flow.json`
 2. Open MQTT broker config node and set host/port/auth for your broker
 3. Ensure Node-RED environment variables are set:
   - `SUPABASE_URL`
