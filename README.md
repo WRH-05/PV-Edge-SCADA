@@ -156,14 +156,12 @@ This study utilises the public **ZAE Bayern EL dataset** for model training and 
 ## Citation
 
 ```bibtex
-@article{hachemi2026edgeai,
-  title   = {Edge-{AI} Severity Regression and Asymmetric Loss for
-             Controlled {PV} Electroluminescence Benchmarking and
-             {SCADA} Alerting},
-  author  = {Hachemi, Wassim R.},
-  journal = {},
-  year    = {2026},
-  note    = {Repository: \url{https://github.com/WRH-05/PV-Edge-SCADA}}
+@misc{hachemi2026edgeai,
+  title        = {Edge-{AI} Severity Regression and Asymmetric Loss for Controlled {PV} Electroluminescence Benchmarking and {SCADA} Alerting},
+  author       = {Hachemi, Wassim R.},
+  year         = {2026},
+  howpublished = {Preprint / Under Review},
+  note         = {Repository: \url{https://github.com/WRH-05/PV-Edge-SCADA}}
 }
 ```
 
