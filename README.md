@@ -14,7 +14,7 @@ Current drone-based photovoltaic (PV) inspections suffer from wind-induced motio
 
 ### Core Innovation: Safety-Aware Asymmetric Huber Loss (SAHL)
 
-Standard Mean Squared Error (MSE) models optimise for average error, leading to the dangerous under-prediction of severe, safety-critical micro-cracks. We introduce **SAHL**, a cost-sensitive regression objective. Applying a two-condition gate —ground-truth severity ≥ 0.70 **and** model under-prediction— the loss penalises critical underestimation events, mathematically prioritising high-consequence failure capture.
+Standard Mean Squared Error (MSE) models optimise for average error, leading to the dangerous under-prediction of severe, safety-critical micro-cracks. We introduce **SAHL**, a cost-sensitive regression objective. Applying a two-condition gate — ground-truth severity ≥ 0.70 **and** model under-prediction — the loss penalises critical underestimation events, mathematically prioritising high-consequence failure capture.
 
 ### Key Performance Metrics (Multi-Seed Validation)
 
@@ -47,19 +47,30 @@ The end-to-end pipeline flows from optical EL capture through edge-AI inference 
 
 ---
 
-## Repository Structure
+## Repository Structure & Paper Path Mapping
 
-| Directory | Description |
-|-----------|-------------|
+| Directory / File | Description |
+|------------------|-------------|
 | [`src/training/`](src/training/) | Core ML: ResNet18 regression model, SAHL loss function, dataset pipeline, ONNX export |
-| [`src/analysis/`](src/analysis/) | Evaluation: multi-seed ablation study, publication-quality plots, significance tests |
-| [`src/inference/`](src/inference/) | Edge deployment: ONNX inference worker, MQTT publishing, sustained benchmark |
+| [`src/analysis/`](src/analysis/) | Evaluation: multi-seed ablation study, test split report generator, publication-quality plots |
+| [`src/inference/`](src/inference/) | Edge deployment: ONNX inference worker, MQTT publishing, sustained hardware benchmark |
 | [`src/NodeRed/`](src/NodeRed/) | Node-RED flow for MQTT ingest, Supabase insertion, and alert routing |
 | [`src/Supabase/`](src/Supabase/) | PostgreSQL schema, alert-state trigger logic, and dashboard views |
-| [`manuscript/`](manuscript/) | Final compiled PDF and LaTeX source |
+| [`manuscript/`](manuscript/) | Final compiled PDF (`main.pdf`) and LaTeX source (`main.tex`) |
 | [`models/`](models/) | Trained PyTorch checkpoints and ONNX exports for SAHL weights (1.0×, 1.5×, 2.5×) |
-| [`data/`](data/) | Benchmark summaries, multi-seed ablation metrics, edge stress-test logs |
-| [`results/`](results/) | Generated plots (PR curves, ROC, confusion matrices) and summary tables |
+| [`data/`](data/) | Benchmark dataset labels CSV (`labels.csv`) |
+| [`results/`](results/) | Generated figures (`results/plots/`) and summary tables (`results/tables/`) |
+
+### 📌 Paper Reference Mapping Guide
+
+If you are reading our manuscript, folder paths cited in the text or footnotes map to the refactored repository layout as follows:
+
+| Path Cited in Paper | Refactored Location | Description |
+| :--- | :--- | :--- |
+| `data/TrainingMetrics` | `results/tables/` & `results/plots/` | Ablation summary tables, variance metrics, and evaluation plots |
+| `data/piMetrics` | `results/tables/benchmark_edge_summary.*` | Raspberry Pi 4 latency, memory (RSS), and throughput logs |
+| `data/NodeRed` | `src/NodeRed/` | Node-RED flow JSON (`flow.json`) and dashboard documentation |
+| `data/Supabase` | `src/Supabase/` | PostgreSQL schema migration scripts (`000_full_migration.sql`) |
 
 ---
 
@@ -73,11 +84,11 @@ python3 -m venv .venv
 source .venv/bin/activate          # Linux / macOS
 # .venv\Scripts\activate           # Windows
 
-# Install training dependencies
-pip install torch torchvision pytorch-lightning opencv-python-headless \
+# Install training & analysis dependencies
+pip install torch torchvision opencv-python-headless \
     pandas matplotlib scikit-learn scipy tqdm onnx onnxruntime
 
-# For edge inference (lightweight)
+# For edge deployment (lightweight)
 pip install -r src/inference/requirements_edge.txt
 ```
 
@@ -89,12 +100,12 @@ python -m src.training.train \
     --csv_path data/labels.csv --data_root data/ \
     --epochs 20 --batch_size 32 --loss_type sahl \
     --loss_weight_multiplier 1.5 \
-    --checkpoint_path models/sahl_1.5x.pth
+    --checkpoint_path models/policy_1.5x_low_error/sahl_1.5x.pth
 
 # Export to ONNX (Opset 18)
 python -m src.training.export_onnx \
-    --checkpoint models/sahl_1.5x.pth \
-    --onnx_output models/sahl_1.5x.onnx
+    --checkpoint models/policy_1.5x_low_error/sahl_1.5x.pth \
+    --onnx_output models/policy_1.5x_low_error/sahl_1.5x.onnx
 ```
 
 ### 3. Run Multi-Seed Ablation & Generate Paper Plots
@@ -103,12 +114,18 @@ python -m src.training.export_onnx \
 # Full ablation: 4 weights × 3 seeds = 12 experiments
 python -m src.analysis.multi_seed_ablation \
     --mode ablation --csv_path data/labels.csv --data_root data/ \
-    --epochs 20 --output_md results/multi_seed_ablation_summary.md
+    --epochs 20 --output_md results/tables/multi_seed_ablation_summary.md
+
+# Generate test split predictions for evaluation
+python -m src.analysis.evaluate_test_split_report \
+    --csv_path data/labels.csv --data_root data/ \
+    --onnx_model models/policy_1.5x_low_error/sahl_1.5x.onnx \
+    --output_csv results/tables/v3_report.csv
 
 # Generate publication-quality figures
 python -m src.analysis.generate_plots \
-    --v1_csv testCsv/v1_report.csv \
-    --v3_csv testCsv/v3_report.csv \
+    --v1_csv results/tables/v1_report.csv \
+    --v3_csv results/tables/v3_report.csv \
     --v1_name "MSE Baseline" --v3_name "SAHL (1.5×)" \
     --output_dir results/plots/ --formats png pdf --dpi 400
 ```
@@ -120,19 +137,19 @@ cd src/inference
 
 # Single-image inference with MQTT publish
 export MQTT_BROKER=10.0.0.5 MQTT_ENABLE=1
-python inference_mqtt.py --image_path ../../captures/cell0041.png
+python inference_mqtt.py --image_path ../../data/sample_cell.png
 
 # Sustained 1,588-inference benchmark (Raspberry Pi 4)
 python benchmark_edge.py \
     --onnx_model ../../models/policy_1.5x_low_error/sahl_1.5x.onnx \
-    --captures_dir ../../captures --loops 4 --warmup_runs 10
+    --captures_dir ../../data --loops 4 --warmup_runs 10
 ```
 
 ---
 
 ## Data Availability
 
-This study utilises the public **ZAE Bayern EL dataset** for all model training and validation. The raw images are not hosted in this repository; only the derived metrics, architectural codebase, and dashboard artefacts are provided.
+This study utilises the public **ZAE Bayern EL dataset** for model training and validation. The raw images are not hosted directly in this repository; only the derived dataset annotations (`data/labels.csv`), trained model weights, and benchmark artifacts are provided.
 
 ---
 
